@@ -339,7 +339,7 @@ public class World {
      * Exit the world
      */
     public void exitWorld() {
-        this.scheduler.close();
+        this.scheduler.shutdownNow();
         this.saveWorld();
     }
 }

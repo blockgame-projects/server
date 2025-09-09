@@ -1,5 +1,6 @@
 package com.james090500;
 
+import com.james090500.command.CommandHandler;
 import com.james090500.network.NettyHandler;
 import com.james090500.utils.GameLogger;
 import com.james090500.utils.ThreadUtil;
@@ -8,10 +9,11 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelId;
 import lombok.Getter;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.HashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
@@ -30,6 +32,8 @@ public class BlockGameServer {
     @Getter
     private static BlockGameServer instance;
 
+    private final CommandHandler commandHandler;
+
     @Getter
     private static final Logger logger = GameLogger.get("BlockGameServer");
 
@@ -39,6 +43,7 @@ public class BlockGameServer {
 
     public BlockGameServer() {
         instance = this;
+        this.commandHandler = new CommandHandler();
         this.world = new World("world");
         this.nettyHandler = new NettyHandler(port);
         this.nettyHandler.run();
@@ -51,22 +56,20 @@ public class BlockGameServer {
                 t.printStackTrace(); // guard so scheduler keeps running
             }
         }, 0, 50, TimeUnit.MILLISECONDS);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(this::exit));
-        BlockGameServer.getLogger().info("Done (2.832s)! For help, type \"help\""); //Tmp
     }
 
     private void tick() {
-        ThreadUtil.runMainQueue();
-        this.world.update();
+        if(running.get()) {
+            ThreadUtil.runMainQueue();
+            this.world.update();
+        }
     }
 
-    private void exit() {
+    public void exit() {
+        getLogger().info("Server is shutting down...");
         if (!running.getAndSet(false)) return;
-        try {
-            tickExec.shutdownNow();
-            tickExec.awaitTermination(2, TimeUnit.SECONDS);
-        } catch (InterruptedException ignored) {}
+        tickExec.shutdownNow();
+        this.nettyHandler.exit();
 
         ThreadUtil.shutdown();
         this.world.exitWorld();

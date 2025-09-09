@@ -10,6 +10,9 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 public class NettyHandler {
 
+    EventLoopGroup bossGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+    EventLoopGroup workerGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+
     private final int port;
 
     public NettyHandler(int port) {
@@ -17,8 +20,7 @@ public class NettyHandler {
     }
 
     public void run() {
-        EventLoopGroup bossGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
-        EventLoopGroup workerGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+
 
         ServerBootstrap bootstrap = new ServerBootstrap()
                 .group(bossGroup, workerGroup)
@@ -29,13 +31,15 @@ public class NettyHandler {
         bindFuture.addListener((ChannelFuture future) -> {
             if (future.isSuccess()) {
                 BlockGameServer.getLogger().info("Server started on port " + port);
-                future.channel().closeFuture().addListener(cf -> {
-                    BlockGameServer.getLogger().info("Server shutting down");
-                });
             } else {
                 BlockGameServer.getLogger().severe(future.cause().getLocalizedMessage());
                 future.cause().printStackTrace();
             }
         });
+    }
+
+    public void exit() {
+        workerGroup.shutdownGracefully();
+        bossGroup.shutdownGracefully();
     }
 }
