@@ -15,11 +15,14 @@ repositories {
     mavenCentral()
     maven {
         url "https://oss.sonatype.org/content/repositories/snapshots/"
-        url "https://libraries.minecraft.net"
     }
+    maven { url "https://libraries.minecraft.net" }
 }
 
 dependencies {
+    implementation 'org.cloudburstmc.fastutil.maps:object-object-maps:8.5.15'
+    implementation 'org.cloudburstmc.fastutil.maps:int-object-maps:8.5.15'
+
     implementation "org.joml:joml:1.10.8"
     implementation 'org.lz4:lz4-java:1.8.0'
 

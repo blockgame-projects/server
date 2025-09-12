@@ -8,80 +8,36 @@ import com.james090500.structure.Tree;
 import com.james090500.utils.OpenSimplexNoise;
 import com.james090500.utils.ThreadUtil;
 
-import java.util.List;
-
 public class Chunk {
 
     public final byte[] chunkData;
-
+    
     public final int chunkSize = 16;
     public final int chunkHeight = 300;
     public final int chunkX;
     public final int chunkZ;
 
-    public boolean needsSaving = false;
-    public boolean generated = false;
+    private boolean queued = false;
 
-    public Chunk(int chunkX, int chunkZ, List<World.BlockPlacement> blockPlacements) {
+    public boolean needsMeshing = false;
+    public boolean needsSaving = false;
+
+    public ChunkStatus chunkStatus = ChunkStatus.EMPTY;
+
+    public Chunk(int chunkX, int chunkZ) {
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
 
         this.chunkData = new byte[chunkSize * chunkSize * chunkHeight];
-
-        ThreadUtil.getQueue("worldGen").submit(() -> {
-            //Generate Terrain
-            this.generateTerrain();
-
-            //Add Deferred Blocks
-            if (blockPlacements != null && !blockPlacements.isEmpty()) {
-                for (World.BlockPlacement bp : blockPlacements) {
-                    this.setBlock(bp.x(), bp.y(), bp.z(), bp.blockId());
-                }
-            }
-
-            //Generate decoration
-            this.generateTrees();
-
-            //Spawn Tower
-            if(chunkX == 0 && chunkZ == 0) {
-                for(int i = 0; i < 110; i++) {
-                    this.setBlock(0, i, 0, Blocks.stoneBlock.getId());
-                }
-
-                for(int x1 = -5; x1 < 5; x1++) {
-                    for(int z1 = -5; z1 < 5; z1++) {
-                        this.setBlock(x1, 95, z1, Blocks.stoneBlock.getId());
-                        this.setBlock(x1, 100, z1, Blocks.stoneBlock.getId());
-                    }
-                }
-            }
-
-            this.generated = true;
-            this.needsSaving = true;
-
-            // Save the state
-            this.saveChunk();
-
-            // Log
-            BlockGameServer.getLogger().info(String.format("[%s, %s] Generated", chunkX, chunkZ));
-        });
     }
 
-    public Chunk(int chunkX, int chunkZ, List<World.BlockPlacement> blockPlacements, byte[] chunkData) {
+    public Chunk(int chunkX, int chunkZ, byte[] chunkData) {
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
         this.chunkData = chunkData;
 
-        ThreadUtil.getQueue("worldGen").submit(() -> {
-            //Add Deferred Blocks
-            if (blockPlacements != null && !blockPlacements.isEmpty()) {
-                for (World.BlockPlacement bp : blockPlacements) {
-                    this.setBlock(bp.x(), bp.y(), bp.z(), bp.blockId());
-                }
-            }
-
-            this.generated = true;
-        });
+        this.chunkStatus = ChunkStatus.FINISHED;
+        this.needsMeshing = true;
     }
 
     /**
@@ -144,6 +100,42 @@ public class Chunk {
         }
     }
 
+    /**
+     * Are our neighbours a minimum specific status?
+     * @return
+     */
+    public boolean isNeighbors(ChunkStatus chunkStatus) {
+        return BlockGameServer.getInstance().getWorld().isChunkStatus(chunkX + 1, chunkZ, chunkStatus) &&
+                BlockGameServer.getInstance().getWorld().isChunkStatus(chunkX - 1,chunkZ, chunkStatus) &&
+                BlockGameServer.getInstance().getWorld().isChunkStatus(chunkX, chunkZ + 1, chunkStatus) &&
+                BlockGameServer.getInstance().getWorld().isChunkStatus(chunkX, chunkZ - 1, chunkStatus);
+    }
+
+    /**
+     * Handle chunk generation
+     */
+    public void generate() {
+        if (this.queued || this.chunkStatus == ChunkStatus.FINISHED) return;
+
+        this.queued = true;
+        ThreadUtil.getQueue("worldGen").submit(() -> {
+            if (this.chunkStatus == ChunkStatus.EMPTY) {
+                this.chunkStatus = ChunkStatus.TERRAIN;
+                this.generateTerrain();
+            } else if (this.chunkStatus == ChunkStatus.TERRAIN) {
+                if (isNeighbors(ChunkStatus.EMPTY)) {
+                    this.chunkStatus = ChunkStatus.DECORATIONS;
+                    this.generateTrees();
+                }
+            } else if (this.chunkStatus == ChunkStatus.DECORATIONS) {
+                // We have finished generation time to mesh
+                this.chunkStatus = ChunkStatus.FINISHED;
+                this.needsMeshing = true;
+            }
+
+            this.queued = false;
+        });
+    }
     /**
      * Generates the actual terrain
      */
@@ -263,7 +255,7 @@ public class Chunk {
     }
 
     public void saveChunk() {
-        if(this.generated && this.chunkData != null && this.needsSaving) {
+        if(this.chunkData != null && this.needsSaving) {
             this.needsSaving = false;
             ThreadUtil.getQueue("worldDisk").submit(() -> BlockGameServer.getInstance().getWorld().saveChunk(this.chunkX, this.chunkZ, this.chunkData));
         }

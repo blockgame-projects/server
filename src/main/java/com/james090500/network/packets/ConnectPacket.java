@@ -20,6 +20,7 @@ public class ConnectPacket implements BlockGamePacket {
 
         // Load Player
         Player player = new Player(channel);
+        player.setForceUpdate(true);
         player.setPosition(new Vector3f(0, 100, 0));
         ThreadUtil.getMainQueue().add(() -> BlockGameServer.getInstance().getPlayers().put(channel.id(), player));
 

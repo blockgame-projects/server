@@ -17,6 +17,9 @@ public class Player {
     private final Channel channel;
 
     @Getter @Setter
+    public boolean forceUpdate;
+
+    @Getter @Setter
     private int lastChunkX;
     @Getter @Setter
     private int lastChunkZ;
